@@ -1,7 +1,7 @@
 package zio
 
 import zio.test.Assertion._
-import zio.test.TestAspect.jvmOnly
+import zio.test.TestAspect.{jvmOnly, shrinks}
 import zio.test._
 
 object ChunkSpec extends ZIOBaseSpec {
@@ -459,10 +459,54 @@ object ChunkSpec extends ZIOBaseSpec {
           } yield assert(result)(equalTo(expected))
         }
       },
+      test("collectZIO chunk - when Chunk is empty, returns a ZIO.succeed(Chunk.empty)") {
+        val pf: PartialFunction[Int, UIO[Int]] = {
+          case 20 => ZIO.succeed(2000)
+          case 30 => ZIO.succeed(3000)
+          case 40 => ZIO.succeed(4000)
+        }
+
+        val c = Chunk.empty
+
+        val doCollect: UIO[Chunk[Int]] = c.collectZIO(pf)
+        for {
+          result <- doCollect
+        } yield assertTrue(
+          result eq Chunk.empty,
+          doCollect match {
+            case ZIO.Sync(_, eval) => eval() eq Chunk.empty[Int]
+            case _                 => false
+          }
+        )
+      },
+      test("collectZIO chunk - when no elements match, returns a ZIO.suspendSucceed(Exit.succeed(Chunk.empty))") {
+        val pf: PartialFunction[Int, UIO[Int]] = {
+          case 20 => ZIO.succeed(2000)
+          case 30 => ZIO.succeed(3000)
+          case 40 => ZIO.succeed(4000)
+        }
+        check(Gen.chunkOf1(intGen)) { c =>
+          /** See [[ZIO.suspendSucceed]] */
+          def isSuspendSucceedEncoding[R, E, A1, A2](flatMap: ZIO.FlatMap[R, E, A1, A2]) =
+            flatMap.first eq ZIO.unit
+
+          val doCollect: UIO[Chunk[Int]] = c.collectZIO(pf)
+          for {
+            result <- doCollect
+          } yield assertTrue(
+            result eq Chunk.empty,
+            doCollect match {
+              case flatMap: ZIO.FlatMap[?, ?, Unit, ?] =>
+                isSuspendSucceedEncoding(flatMap) && (flatMap.successK(()) == Exit.succeed(Chunk.empty[Int]))
+              case _ => false
+            }
+          )
+        }
+      },
       test("collectZIO chunk that fails") {
         Chunk(1, 2).collectZIO { case 2 => ZIO.fail("Ouch") }.either.map(assert(_)(isLeft(equalTo("Ouch"))))
       } @@ zioTag(errors)
-    ),
+    ) @@ shrinks(0),
     suite("collectWhile")(
       test("collectWhile empty Chunk") {
         assert(Chunk.empty[Nothing].collectWhile { case _ => 1 })(isEmpty)

@@ -1599,23 +1599,27 @@ object Chunk extends ChunkFactory with ChunkPlatformSpecific {
 
     override def collectZIO[R, E, B](
       pf: PartialFunction[A, ZIO[R, E, B]]
-    )(implicit trace: Trace): ZIO[R, E, Chunk[B]] = ZIO.suspendSucceed {
-      val builder = ChunkBuilder.make[B]()
-      builder.sizeHint(length)
+    )(implicit trace: Trace): ZIO[R, E, Chunk[B]] =
+      ZIO.suspendSucceed {
+        val length0 = self.length
+        val builder = ChunkBuilder.make[B]()
+        builder.sizeHint(length0)
 
-      val orElse = (_: A) => ZIO.succeed(null.asInstanceOf[B])
+        @tailrec
+        def loop(index: Int, acc: ZIO[R, E, Unit]): ZIO[R, E, Chunk[B]] =
+          if (index < length0) {
+            val a = self(index)
+            val effect =
+              if (pf.isDefinedAt(a))
+                acc *> pf.apply(a).map { b => builder += b; () }
+              else
+                acc
 
-      def loop(index: Int): ZIO[R, E, Chunk[B]] =
-        if (index < length) {
-          val a = self(index)
-          pf.applyOrElse(a, orElse).flatMap { b =>
-            if (b != null) builder += b
-            loop(index + 1)
-          }
-        } else ZIO.succeed(builder.result())
+            loop(index + 1, effect)
+          } else acc.as(builder.result())
 
-      loop(0)
-    }
+        loop(0, Exit.unit)
+      }
 
     override def collectWhile[B](pf: PartialFunction[A, B]): Chunk[B] = {
       val self    = array
