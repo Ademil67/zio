@@ -1627,13 +1627,13 @@ object Chunk extends ChunkFactory with ChunkPlatformSpecific {
       val builder = ChunkBuilder.make[B]()
       builder.sizeHint(len)
 
-      var i    = 0
-      var done = false
-      while (!done && i < len) {
+      var i       = 0
+      var notDone = true
+      while (notDone && i < len) {
         val a = self(i)
 
         if (pf.isDefinedAt(a)) builder += pf.apply(a)
-        else done = true
+        else notDone = false
 
         i += 1
       }
