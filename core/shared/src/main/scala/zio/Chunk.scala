@@ -1601,13 +1601,13 @@ object Chunk extends ChunkFactory with ChunkPlatformSpecific {
       pf: PartialFunction[A, ZIO[R, E, B]]
     )(implicit trace: Trace): ZIO[R, E, Chunk[B]] =
       ZIO.suspendSucceed {
-        val length0 = self.length
+        val len     = self.length
         val builder = ChunkBuilder.make[B]()
-        builder.sizeHint(length0)
+        builder.sizeHint(len)
 
         @tailrec
         def loop(index: Int, acc: ZIO[R, E, Unit]): ZIO[R, E, Chunk[B]] =
-          if (index < length0) {
+          if (index < len) {
             val a = self(index)
             val effect =
               if (pf.isDefinedAt(a))
