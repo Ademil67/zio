@@ -1630,13 +1630,10 @@ object Chunk extends ChunkFactory with ChunkPlatformSpecific {
       var i    = 0
       var done = false
       while (!done && i < len) {
-        val b = pf.applyOrElse(self(i), (_: A) => null.asInstanceOf[B])
+        val next = self(i)
 
-        if (b != null) {
-          builder += b
-        } else {
-          done = true
-        }
+        if (pf.isDefinedAt(next)) builder += pf.apply(next)
+        else done = true
 
         i += 1
       }
